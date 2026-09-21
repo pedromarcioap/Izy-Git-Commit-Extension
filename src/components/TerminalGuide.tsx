@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Terminal, Copy, Check, Play, ShieldCheck, Box, Wrench } from "lucide-react";
+import { Terminal, Copy, Check, Play, Box, Globe, Sparkles } from "lucide-react";
 
 interface CommandBlockProps {
   command: string;
@@ -41,154 +41,139 @@ export const TerminalGuide: React.FC = () => {
       <div className="bg-white border border-zinc-200 rounded-xl p-5">
         <h2 className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
           <Terminal className="w-4 h-4 text-zinc-700" />
-          <span>Guia Passo a Passo: Instalação, Compilação e Depuração Local (F5)</span>
+          <span>Guia Passo a Passo: Instalação, Compilação e Empacotamento (.vsix)</span>
         </h2>
         <p className="text-xs text-zinc-500 mt-1">
-          Siga as etapas abaixo no terminal do seu sistema operacional para inicializar e testar a extensão no VS Code.
+          Siga as etapas abaixo para compilar a extensão e gerar o pacote <code className="text-zinc-800 font-mono">.vsix</code> para o VS Code ou Antigravity.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Passo 1 - Criar pasta e arquivos */}
+        {/* Passo 1 - Dependências */}
         <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4">
           <div className="flex items-center gap-2.5">
             <span className="w-6 h-6 rounded-full bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
               1
             </span>
             <h3 className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">
-              Criar Diretório e Estrutura Inicial
+              Instalação das Dependências
             </h3>
           </div>
           <p className="text-xs text-zinc-600 leading-relaxed">
-            Crie a pasta do projeto e certifique-se de que os arquivos gerados (<code>package.json</code>, <code>tsconfig.json</code>, <code>src/extension.ts</code> e <code>src/git.d.ts</code>) estejam salvos na estrutura correspondente:
+            Navegue até a pasta da extensão e instale as dependências:
           </p>
           <CommandBlock
-            description="Criar pasta e navegar até ela"
-            command={`mkdir gemini-git-commit\ncd gemini-git-commit\nmkdir src .vscode`}
+            description="Instalar pacotes no diretório do projeto"
+            command={`npm install`}
           />
         </div>
 
-        {/* Passo 2 - Instalar dependências */}
+        {/* Passo 2 - Compilar o projeto */}
         <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4">
           <div className="flex items-center gap-2.5">
             <span className="w-6 h-6 rounded-full bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
               2
             </span>
             <h3 className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">
-              Instalação das Dependências
+              Compilar com esbuild
             </h3>
           </div>
           <p className="text-xs text-zinc-600 leading-relaxed">
-            Instale o SDK oficial do Google Gen AI (<code>@google/genai</code>), os tipos do VS Code e o bundler ultrarrápido <code>esbuild</code>:
+            Execute a compilação do TypeScript gerando o bundle único em <code>dist/extension.js</code>:
           </p>
           <CommandBlock
-            description="Instalar pacotes npm"
-            command={`npm install`}
+            description="Compilar bundle de produção"
+            command={`npm run package`}
           />
         </div>
 
-        {/* Passo 3 - Compilar o projeto */}
+        {/* Passo 3 - Empacotar VSIX */}
         <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4">
           <div className="flex items-center gap-2.5">
             <span className="w-6 h-6 rounded-full bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
               3
             </span>
             <h3 className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">
-              Compilação e Empacotamento
+              Gerar Pacote .vsix
             </h3>
           </div>
           <p className="text-xs text-zinc-600 leading-relaxed">
-            Execute a compilação com <code>esbuild</code> para gerar o arquivo bundle único em <code>dist/extension.js</code>:
+            Gere o arquivo binário instalável <code className="font-mono">.vsix</code> com a ferramenta oficial:
           </p>
           <CommandBlock
-            description="Compilar via script package"
-            command={`npm run package`}
+            description="Gerar instalador .vsix"
+            command={`npx @vscode/vsce package`}
           />
           <p className="text-[11px] text-zinc-500">
-            Dica: Para compilação contínua durante alterações, use <code>npm run watch</code> em outro terminal.
+            Dica: Se perguntar sobre prosseguir sem repositório git remoto, digite <code>y</code> ou use <code>--allow-missing-repository</code>.
           </p>
         </div>
 
-        {/* Passo 4 - Iniciar depuração F5 */}
+        {/* Passo 4 - Instalar no Antigravity / VS Code */}
         <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4">
           <div className="flex items-center gap-2.5">
             <span className="w-6 h-6 rounded-full bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
               4
             </span>
             <h3 className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">
-              Depuração com F5 no VS Code
+              Instalar no Antigravity / VS Code
             </h3>
           </div>
           <p className="text-xs text-zinc-600 leading-relaxed">
-            Abra a pasta do projeto no VS Code e inicie a execução:
+            No Antigravity ou VS Code, instale diretamente pela interface gráfica ou CLI:
           </p>
           <ul className="text-xs text-zinc-600 space-y-1.5 list-none">
-            <li>- Abra a pasta do projeto: <code>code .</code></li>
-            <li>- Pressione a tecla <strong>F5</strong> (ou menu Executar -&gt; Iniciar Depuração).</li>
-            <li>- Uma nova janela intitulada <strong>[Extension Development Host]</strong> será aberta automaticamente.</li>
+            <li>- Abra o menu de Extensões (<code>Ctrl+Shift+X</code>).</li>
+            <li>- Clique no menu de 3 pontinhos (...) no topo do painel de extensões.</li>
+            <li>- Selecione <strong>"Install from VSIX..."</strong> e escolha o arquivo gerado.</li>
           </ul>
         </div>
       </div>
 
-      {/* Seção com Instruções de Teste no Extension Host */}
+      {/* Seção com Instruções de Modelos Suportados */}
       <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4">
         <h3 className="text-xs font-semibold text-zinc-900 uppercase tracking-wide flex items-center gap-2">
-          <Play className="w-4 h-4 text-emerald-600" />
-          <span>Como Testar a Extensão na Janela de Depuração</span>
+          <Globe className="w-4 h-4 text-cyan-600" />
+          <span>Modelos e Provedores Suportados</span>
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-          <div className="p-3.5 bg-zinc-50 border border-zinc-200 rounded-lg space-y-2">
+          <div className="p-3.5 bg-zinc-50 border border-zinc-200 rounded-lg space-y-1.5">
             <div className="font-semibold text-zinc-900 flex items-center gap-1.5">
-              <span>Passo A: Abrir Repositório Git</span>
+              <span>DeepSeek R1 / V3</span>
             </div>
-            <p className="text-zinc-600 leading-relaxed">
-              Na janela de desenvolvimento aberta pelo F5, abra qualquer pasta que seja um repositório Git com alterações pendentes (ou execute <code>git init</code>).
+            <p className="text-zinc-600 leading-relaxed text-[11px]">
+              Disponível via <strong>OpenRouter</strong> (<code>deepseek/deepseek-r1</code>) ou API direta da DeepSeek.
             </p>
           </div>
 
-          <div className="p-3.5 bg-zinc-50 border border-zinc-200 rounded-lg space-y-2">
+          <div className="p-3.5 bg-zinc-50 border border-zinc-200 rounded-lg space-y-1.5">
             <div className="font-semibold text-zinc-900 flex items-center gap-1.5">
-              <span>Passo B: Clicar no $(sparkle)</span>
+              <span>Qwen 2.5 Coder 32B</span>
             </div>
-            <p className="text-zinc-600 leading-relaxed">
-              Abra a aba Source Control (Ctrl+Shift+G / Cmd+Shift+G). No topo da barra de título do Git, clique no ícone de faísca <code>$(sparkle)</code>.
+            <p className="text-zinc-600 leading-relaxed text-[11px]">
+              Especializado em código via <strong>OpenRouter</strong> (<code>qwen/qwen-2.5-coder-32b-instruct</code>) ou Ollama local.
             </p>
           </div>
 
-          <div className="p-3.5 bg-zinc-50 border border-zinc-200 rounded-lg space-y-2">
+          <div className="p-3.5 bg-zinc-50 border border-zinc-200 rounded-lg space-y-1.5">
             <div className="font-semibold text-zinc-900 flex items-center gap-1.5">
-              <span>Passo C: Menu de Contexto (Botão Direito)</span>
+              <span>Claude 3.7 Sonnet</span>
             </div>
-            <p className="text-zinc-600 leading-relaxed">
-              Clique com o botão direito sobre qualquer arquivo modificado ou sobre o grupo <code>Staged Changes</code> e selecione <code>Gerar Mensagem de Commit com IA</code>.
+            <p className="text-zinc-600 leading-relaxed text-[11px]">
+              Flagship da Anthropic com raciocínio híbrido via OpenRouter ou API direta.
             </p>
           </div>
 
-          <div className="p-3.5 bg-zinc-50 border border-zinc-200 rounded-lg space-y-2">
+          <div className="p-3.5 bg-zinc-50 border border-zinc-200 rounded-lg space-y-1.5">
             <div className="font-semibold text-zinc-900 flex items-center gap-1.5">
-              <span>Passo D: Seleção de Modelos</span>
+              <span>Google Gemini</span>
             </div>
-            <p className="text-zinc-600 leading-relaxed">
-              Clique no item <code>$(sparkle) gemini-2.5-flash</code> na Barra de Status inferior ou execute <code>Ctrl+Shift+P -&gt; Gemini Commit: Selecionar Modelo de IA</code>.
+            <p className="text-zinc-600 leading-relaxed text-[11px]">
+              Gemini 2.5 Flash, 3.8 Flash e Gemini 3.1 Pro com chave gratuita do Google AI Studio.
             </p>
           </div>
         </div>
-      </div>
-
-      {/* Seção Empacotamento VSIX */}
-      <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-3">
-        <h3 className="text-xs font-semibold text-zinc-900 uppercase tracking-wide flex items-center gap-2">
-          <Box className="w-4 h-4 text-zinc-700" />
-          <span>Gerar Pacote de Instalação Local (.vsix)</span>
-        </h3>
-        <p className="text-xs text-zinc-600">
-          Para instalar a extensão no seu VS Code de produção sem precisar da depuração F5:
-        </p>
-        <CommandBlock
-          description="Gerar arquivo .vsix com a ferramenta oficial vsce"
-          command={`npx @vscode/vsce package\ncode --install-extension gemini-git-commit-1.0.0.vsix`}
-        />
       </div>
     </div>
   );

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   Sparkles,
-  GitCommit,
   GitPullRequest,
   Check,
   Copy,
@@ -17,7 +16,12 @@ import {
   Layers,
   Cpu,
   MousePointerClick,
-  CheckCircle2
+  CheckCircle2,
+  Globe,
+  Zap,
+  Brain,
+  Code2,
+  Server
 } from "lucide-react";
 import { SAMPLE_DIFFS, SampleDiff, SUPPORTED_MODELS, ModelOption } from "../data/extensionFiles";
 
@@ -38,11 +42,30 @@ export const VsCodeSimulator: React.FC = () => {
   const [commitMessage, setCommitMessage] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
-  const [apiKeyPromptOpen, setApiKeyPromptOpen] = useState<boolean>(false);
+  
+  // Model and Provider state
+  const [selectedModel, setSelectedModel] = useState<string>("deepseek/deepseek-r1");
   const [modelPickerOpen, setModelPickerOpen] = useState<boolean>(false);
-  const [selectedModel, setSelectedModel] = useState<string>("gemini-2.5-flash");
-  const [customApiKey, setCustomApiKey] = useState<string>("");
-  const [savedApiKey, setSavedApiKey] = useState<string>("");
+  const [modelFilterProvider, setModelFilterProvider] = useState<string>("all");
+  
+  // API Keys state
+  const [apiKeyPromptOpen, setApiKeyPromptOpen] = useState<boolean>(false);
+  const [activeProviderForApiKey, setActiveProviderForApiKey] = useState<"gemini" | "openrouter" | "deepseek" | "claude" | "custom">("openrouter");
+  const [apiKeys, setApiKeys] = useState<{
+    gemini: string;
+    openrouter: string;
+    deepseek: string;
+    claude: string;
+    custom: string;
+  }>({
+    gemini: "",
+    openrouter: "",
+    deepseek: "",
+    claude: "",
+    custom: ""
+  });
+  const [tempApiKeyInput, setTempApiKeyInput] = useState<string>("");
+
   const [statusNotification, setStatusNotification] = useState<{
     type: "info" | "error" | "progress";
     message: string;
@@ -71,6 +94,9 @@ export const VsCodeSimulator: React.FC = () => {
 
   const activeDiffText = isCustomMode ? customDiff : selectedSample.diff;
 
+  const currentModelData =
+    SUPPORTED_MODELS.find((m) => m.id === selectedModel) || SUPPORTED_MODELS[0];
+
   const handleOpenContextMenu = (
     e: React.MouseEvent,
     targetType: ContextMenuState["targetType"],
@@ -79,7 +105,6 @@ export const VsCodeSimulator: React.FC = () => {
     e.preventDefault();
     e.stopPropagation();
 
-    // Calcular posição respeitando limites da tela
     const x = Math.min(e.clientX, window.innerWidth - 240);
     const y = Math.min(e.clientY, window.innerHeight - 200);
 
@@ -94,6 +119,8 @@ export const VsCodeSimulator: React.FC = () => {
 
   const handleGenerate = async (forcedModel?: string) => {
     const modelToUse = forcedModel || selectedModel;
+    const modelObj = SUPPORTED_MODELS.find((m) => m.id === modelToUse) || currentModelData;
+    const providerToUse = modelObj.provider;
 
     // Validação de alterações vazias
     if (!isStaged && !hasUnstagedChanges) {
@@ -119,18 +146,21 @@ export const VsCodeSimulator: React.FC = () => {
     setStatusNotification({
       type: "progress",
       message: isStaged
-        ? `Gemini (${modelToUse}): Analisando alterações em staging...`
-        : `Gemini (${modelToUse}): Analisando alterações não preparadas / unstaged...`
+        ? `Consultando ${modelObj.providerLabel} (${modelToUse})... Analisando arquivos em staging.`
+        : `Consultando ${modelObj.providerLabel} (${modelToUse})... Analisando arquivos unstaged.`
     });
 
     try {
+      const activeKey = apiKeys[providerToUse] || undefined;
+
       const response = await fetch("/api/generate-commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           diff: diffToProcess,
-          customApiKey: savedApiKey || undefined,
-          model: modelToUse
+          customApiKey: activeKey,
+          model: modelToUse,
+          provider: providerToUse
         })
       });
 
@@ -138,34 +168,36 @@ export const VsCodeSimulator: React.FC = () => {
 
       if (!response.ok) {
         if (data.requiresKey) {
+          setActiveProviderForApiKey(data.provider || providerToUse);
           setApiKeyPromptOpen(true);
           setStatusNotification({
             type: "error",
-            message: "Chave GEMINI_API_KEY necessária no SecretStorage."
+            message: data.error || `Chave necessária para o provedor ${providerToUse}.`
           });
           return;
         }
-        throw new Error(data.error || "Falha na chamada à API do Gemini.");
+        throw new Error(data.error || "Falha na chamada à API.");
       }
 
       setCommitMessage(data.commitMessage);
       setStatusNotification({
         type: "info",
         message: isStaged
-          ? `Mensagem gerada com sucesso via ${modelToUse} a partir dos arquivos em staging.`
-          : `Mensagem gerada com sucesso via ${modelToUse} a partir dos arquivos modificados (unstaged).`
+          ? `Mensagem gerada com sucesso (${modelObj.name}) a partir dos arquivos em staging.`
+          : `Mensagem gerada com sucesso (${modelObj.name}) a partir dos arquivos modificados.`
       });
       setTimeout(() => setStatusNotification(null), 5000);
     } catch (err: unknown) {
-      // Fallback local se a API não estiver conectada
+      // Fallback local caso a API externa não responda
       const fallbackMsg = generateClientFallbackCommit(
         selectedSample.type,
-        isCustomMode ? "custom" : selectedSample.id
+        isCustomMode ? "custom" : selectedSample.id,
+        modelObj.name
       );
       setCommitMessage(fallbackMsg);
       setStatusNotification({
         type: "info",
-        message: `Mensagem gerada no padrão Conventional Commits via ${modelToUse}.`
+        message: `Mensagem gerada no padrão Conventional Commits via ${modelObj.name}.`
       });
       setTimeout(() => setStatusNotification(null), 5000);
     } finally {
@@ -173,7 +205,7 @@ export const VsCodeSimulator: React.FC = () => {
     }
   };
 
-  const generateClientFallbackCommit = (type: string, id: string): string => {
+  const generateClientFallbackCommit = (type: string, id: string, modelName: string): string => {
     if (id === "auth-jwt") {
       return `feat(auth): implementar geracao e validacao de tokens jwt\n\n- adicionar servico central de geracao para access token e refresh token\n- incluir middleware de autenticacao com validacao de header bearer\n- definir tipagem estrita para token payload com userId e role`;
     }
@@ -183,7 +215,7 @@ export const VsCodeSimulator: React.FC = () => {
     if (id === "refactor-scm") {
       return `refactor(scm): modularizar extracao de diff com fallback automatico\n\n- extrair logica de leitura do git para modulo isolado git-helper\n- garantir suporte a fallback de unstaged quando staging estiver vazio\n- atualizar assinatura do comando aiCommit.generateCommitMessage`;
     }
-    return `${type || "chore"}(core): atualizar componentes e regras de negocio\n\n- aplicar alteracoes no codigo fonte conforme diff analisado\n- padronizar tipos e regras de execucao no fluxo principal\n- verificar integridade dos modulos alterados`;
+    return `${type || "chore"}(core): atualizar componentes e regras de negocio\n\n- aplicar alteracoes no codigo fonte conforme diff analisado por ${modelName}\n- padronizar tipos e regras de execucao no fluxo principal\n- verificar integridade dos modulos alterados`;
   };
 
   const handleCopyMessage = () => {
@@ -194,21 +226,19 @@ export const VsCodeSimulator: React.FC = () => {
   };
 
   const handleSaveApiKey = () => {
-    if (!customApiKey.trim()) {
-      setSavedApiKey("");
-      setApiKeyPromptOpen(false);
-      setStatusNotification({
-        type: "info",
-        message: "Chave do Gemini removida com sucesso do cofre de segredos."
-      });
-      setTimeout(() => setStatusNotification(null), 4000);
-      return;
-    }
-    setSavedApiKey(customApiKey.trim());
+    const trimmed = tempApiKeyInput.trim();
+    setApiKeys((prev) => ({
+      ...prev,
+      [activeProviderForApiKey]: trimmed
+    }));
     setApiKeyPromptOpen(false);
+    setTempApiKeyInput("");
+
     setStatusNotification({
       type: "info",
-      message: "Chave GEMINI_API_KEY salva com sucesso no cofre seguro do sistema."
+      message: trimmed
+        ? `Chave de API salva com sucesso para o provedor ${activeProviderForApiKey}.`
+        : `Chave de API removida para o provedor ${activeProviderForApiKey}.`
     });
     setTimeout(() => setStatusNotification(null), 4000);
   };
@@ -216,17 +246,21 @@ export const VsCodeSimulator: React.FC = () => {
   const handleSelectModel = (modelId: string) => {
     setSelectedModel(modelId);
     setModelPickerOpen(false);
+    const m = SUPPORTED_MODELS.find((item) => item.id === modelId);
     setStatusNotification({
       type: "info",
-      message: `Modelo do Gemini configurado para: ${modelId}`
+      message: `Modelo de IA configurado para: ${m ? m.name : modelId}`
     });
     setTimeout(() => setStatusNotification(null), 3000);
   };
 
-  const currentModelData = SUPPORTED_MODELS.find((m) => m.id === selectedModel) || SUPPORTED_MODELS[0];
-
   const titleLine = commitMessage ? commitMessage.split("\n")[0] : "";
   const titleCharCount = titleLine.length;
+
+  const filteredModels =
+    modelFilterProvider === "all"
+      ? SUPPORTED_MODELS
+      : SUPPORTED_MODELS.filter((m) => m.provider === modelFilterProvider);
 
   return (
     <div className="space-y-6">
@@ -239,7 +273,7 @@ export const VsCodeSimulator: React.FC = () => {
               <span>Simulador Interativo do VS Code Source Control (SCM)</span>
             </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
-              Experimente a leitura do diff, a seleção de modelos e o menu de contexto (botão direito).
+              Suporte multi-provedor: DeepSeek R1/V3, Qwen 2.5 Coder, Claude 3.7, Google Gemini e Endpoints Personalizados.
             </p>
           </div>
 
@@ -249,20 +283,32 @@ export const VsCodeSimulator: React.FC = () => {
               id="btn-select-model"
               onClick={() => setModelPickerOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-zinc-900 text-white hover:bg-zinc-800 rounded-lg transition-colors shadow-xs"
-              title="Comando aiCommit.selectModel: Escolher modelo do Gemini"
+              title="Comando aiCommit.selectModel: Escolher modelo de IA"
             >
-              <Cpu className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Modelo: {selectedModel}</span>
+              {currentModelData.provider === "openrouter" && <Globe className="w-3.5 h-3.5 text-cyan-400" />}
+              {currentModelData.provider === "gemini" && <Sparkles className="w-3.5 h-3.5 text-emerald-400" />}
+              {currentModelData.provider === "deepseek" && <Brain className="w-3.5 h-3.5 text-indigo-400" />}
+              {currentModelData.provider === "claude" && <Cpu className="w-3.5 h-3.5 text-amber-400" />}
+              {currentModelData.provider === "custom" && <Server className="w-3.5 h-3.5 text-zinc-400" />}
+              <span>{currentModelData.name}</span>
               <ChevronDown className="w-3 h-3 text-zinc-400" />
             </button>
 
             <button
-              onClick={() => setApiKeyPromptOpen(true)}
+              onClick={() => {
+                setActiveProviderForApiKey(currentModelData.provider);
+                setTempApiKeyInput(apiKeys[currentModelData.provider] || "");
+                setApiKeyPromptOpen(true);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-zinc-100 text-zinc-700 hover:bg-zinc-200 rounded-lg transition-colors border border-zinc-200"
               title="Simular comando aiCommit.setApiKey (vscode.SecretStorage)"
             >
               <KeyRound className="w-3.5 h-3.5 text-zinc-600" />
-              <span>{savedApiKey ? "Chave Salva (SecretStorage)" : "Configurar API Key"}</span>
+              <span>
+                {apiKeys[currentModelData.provider]
+                  ? `Chave Salva (${currentModelData.providerLabel})`
+                  : `Configurar Chave (${currentModelData.providerLabel})`}
+              </span>
             </button>
 
             <button
@@ -321,10 +367,15 @@ export const VsCodeSimulator: React.FC = () => {
         </div>
 
         {/* Banner de Dica sobre o Menu de Contexto */}
-        <div className="mt-3.5 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-xs text-emerald-800">
-          <MousePointerClick className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>
-            <strong>Menu de Contexto Disponível:</strong> Clique com o <strong>botão direito</strong> nos arquivos do SCM, no cabeçalho dos grupos ou no visualizador de diff para testar o contextmenu integrado do VS Code!
+        <div className="mt-3.5 p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg flex items-center justify-between text-xs text-zinc-700">
+          <div className="flex items-center gap-2">
+            <MousePointerClick className="w-4 h-4 text-zinc-500 shrink-0" />
+            <span>
+              <strong>Menu de Contexto Disponível:</strong> Clique com o <strong>botão direito</strong> nos arquivos do SCM, no cabeçalho dos grupos ou no editor para acionar a IA.
+            </span>
+          </div>
+          <span className="font-mono text-[11px] text-zinc-500 hidden sm:inline-block">
+            Provedor: <strong className="text-zinc-800">{currentModelData.providerLabel}</strong>
           </span>
         </div>
       </div>
@@ -338,18 +389,18 @@ export const VsCodeSimulator: React.FC = () => {
             <span className="w-3 h-3 rounded-full bg-yellow-500/80 inline-block"></span>
             <span className="w-3 h-3 rounded-full bg-green-500/80 inline-block"></span>
             <span className="ml-3 font-mono text-zinc-300">
-              workspace-project [Extension Development Host - VS Code]
+              izy-git-commit [Extension Development Host - VS Code / Antigravity]
             </span>
           </div>
           <div className="flex items-center gap-3 text-zinc-400 text-[11px] font-mono">
             <span>Git: main*</span>
             <span
               onClick={() => setModelPickerOpen(true)}
-              className="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded text-emerald-400 cursor-pointer flex items-center gap-1 transition-colors"
-              title="Clique para alternar o modelo do Gemini"
+              className="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded text-cyan-300 cursor-pointer flex items-center gap-1 transition-colors"
+              title="Clique para alternar o modelo de IA"
             >
               <Cpu className="w-3 h-3" />
-              {selectedModel}
+              {currentModelData.name}
             </span>
           </div>
         </div>
@@ -450,153 +501,130 @@ export const VsCodeSimulator: React.FC = () => {
                     </button>
                   )}
                 </div>
-
-                {/* Botão de Commit Simulado */}
-                <button
-                  onClick={() => {
-                    if (!commitMessage) {
-                      handleGenerate();
-                      return;
-                    }
-                    setStatusNotification({
-                      type: "info",
-                      message: "Commit registrado com sucesso no repositório local."
-                    });
-                    setCommitMessage("");
-                    setTimeout(() => setStatusNotification(null), 4000);
-                  }}
-                  className="mt-2 w-full py-1.5 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium rounded flex items-center justify-center gap-1.5 transition-colors border border-zinc-700/50"
-                >
-                  <GitCommit className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Commit (git commit -m)</span>
-                </button>
               </div>
 
-              {/* Árvore de Alterações com Suporte a Context Menu (Botão Direito) */}
-              <div className="mt-4 space-y-3 text-xs select-none">
-                {/* Staged Changes Header e Itens */}
-                <div
-                  onContextMenu={(e) => handleOpenContextMenu(e, "staged-group", "Staged Changes")}
-                  className="border border-zinc-800 rounded-md bg-zinc-950/50 overflow-hidden cursor-context-menu"
-                >
-                  <div className="flex items-center justify-between px-2.5 py-1.5 bg-zinc-950 text-zinc-400 border-b border-zinc-800">
-                    <span className="flex items-center gap-1.5 text-[11px] font-semibold">
-                      <ChevronDown className="w-3 h-3" />
-                      <span>STAGED CHANGES ({isStaged ? selectedSample.filesChanged.length : 0})</span>
-                    </span>
-                    <span className="text-[10px] text-emerald-400 font-mono">
-                      {isStaged ? "diff(cached=true)" : "vazio"}
-                    </span>
+              {/* Lista de Arquivos do SCM (Staged Changes / Changes) */}
+              <div className="mt-4 space-y-3">
+                {/* Grupo: Staged Changes */}
+                <div>
+                  <div
+                    onContextMenu={(e) => handleOpenContextMenu(e, "staged-group", "Staged Changes")}
+                    className="flex items-center justify-between text-[11px] font-mono text-zinc-400 hover:text-zinc-200 cursor-pointer py-1 px-1 rounded hover:bg-zinc-800/50"
+                  >
+                    <div className="flex items-center gap-1">
+                      <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
+                      <span className="font-semibold text-zinc-300">Staged Changes</span>
+                      <span className="text-[10px] text-emerald-400 ml-1">
+                        ({isStaged ? selectedSample.filesChanged.length : "0"})
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-zinc-500">git diff --cached</span>
                   </div>
-                  <div className="p-2 space-y-1">
-                    {isStaged ? (
-                      selectedSample.filesChanged.map((file, i) => (
+
+                  {isStaged && (
+                    <div className="mt-1 space-y-0.5 pl-2">
+                      {selectedSample.filesChanged.map((file, idx) => (
                         <div
-                          key={i}
+                          key={idx}
                           onContextMenu={(e) => handleOpenContextMenu(e, "file", file)}
-                          className="flex items-center justify-between text-[11px] text-zinc-300 font-mono py-0.5 px-1 rounded hover:bg-zinc-800/60 transition-colors"
-                          title="Clique com o botão direito para abrir o context menu"
+                          className="flex items-center justify-between text-xs font-mono py-1 px-2 rounded bg-zinc-950/40 hover:bg-zinc-800/80 text-zinc-300 group cursor-pointer"
                         >
-                          <span className="truncate pr-2">{file}</span>
-                          <span className="text-emerald-400 font-bold text-[10px]">M</span>
+                          <div className="flex items-center gap-2 truncate">
+                            <FileCode className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span className="truncate text-[11px]">{file}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-emerald-400 font-bold">M</span>
+                          </div>
                         </div>
-                      ))
-                    ) : (
-                      <div className="text-[11px] text-zinc-500 italic py-1 text-center">
-                        Nenhum arquivo em staging (fallback ativo)
-                      </div>
-                    )}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Unstaged Changes Header e Itens */}
-                <div
-                  onContextMenu={(e) => handleOpenContextMenu(e, "unstaged-group", "Changes")}
-                  className="border border-zinc-800 rounded-md bg-zinc-950/50 overflow-hidden cursor-context-menu"
-                >
-                  <div className="flex items-center justify-between px-2.5 py-1.5 bg-zinc-950 text-zinc-400 border-b border-zinc-800">
-                    <span className="flex items-center gap-1.5 text-[11px] font-semibold">
-                      <ChevronDown className="w-3 h-3" />
-                      <span>CHANGES ({!isStaged ? selectedSample.filesChanged.length : 1})</span>
-                    </span>
-                    <span className="text-[10px] text-amber-400 font-mono">
-                      {!isStaged ? "diff(cached=false)" : "secundário"}
-                    </span>
+                {/* Grupo: Changes (Unstaged) */}
+                <div>
+                  <div
+                    onContextMenu={(e) => handleOpenContextMenu(e, "unstaged-group", "Changes (Unstaged)")}
+                    className="flex items-center justify-between text-[11px] font-mono text-zinc-400 hover:text-zinc-200 cursor-pointer py-1 px-1 rounded hover:bg-zinc-800/50"
+                  >
+                    <div className="flex items-center gap-1">
+                      <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
+                      <span className="font-semibold text-zinc-400">Changes</span>
+                      <span className="text-[10px] text-amber-400 ml-1">
+                        ({!isStaged ? selectedSample.filesChanged.length : "0"})
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-zinc-500">git diff</span>
                   </div>
-                  <div className="p-2 space-y-1">
-                    {!isStaged ? (
-                      selectedSample.filesChanged.map((file, i) => (
+
+                  {!isStaged && (
+                    <div className="mt-1 space-y-0.5 pl-2">
+                      {selectedSample.filesChanged.map((file, idx) => (
                         <div
-                          key={i}
+                          key={idx}
                           onContextMenu={(e) => handleOpenContextMenu(e, "file", file)}
-                          className="flex items-center justify-between text-[11px] text-zinc-300 font-mono py-0.5 px-1 rounded hover:bg-zinc-800/60 transition-colors"
-                          title="Clique com o botão direito para abrir o context menu"
+                          className="flex items-center justify-between text-xs font-mono py-1 px-2 rounded bg-zinc-950/40 hover:bg-zinc-800/80 text-zinc-300 group cursor-pointer"
                         >
-                          <span className="truncate pr-2">{file}</span>
-                          <span className="text-amber-400 font-bold text-[10px]">M</span>
+                          <div className="flex items-center gap-2 truncate">
+                            <FileCode className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span className="truncate text-[11px]">{file}</span>
+                          </div>
+                          <span className="text-[10px] text-amber-400 font-bold">M</span>
                         </div>
-                      ))
-                    ) : (
-                      <div
-                        onContextMenu={(e) => handleOpenContextMenu(e, "file", "package-lock.json")}
-                        className="flex items-center justify-between text-[11px] text-zinc-400 font-mono py-0.5 px-1 rounded hover:bg-zinc-800/60 transition-colors"
-                      >
-                        <span className="truncate pr-2">package-lock.json</span>
-                        <span className="text-zinc-500 font-bold text-[10px]">U</span>
-                      </div>
-                    )}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Informações de Status na Barra Inferior */}
-            <div className="pt-3 border-t border-zinc-800 text-[11px] text-zinc-400 font-mono flex items-center justify-between">
-              <span
-                onClick={() => setModelPickerOpen(true)}
-                className="hover:text-emerald-400 cursor-pointer flex items-center gap-1"
-                title="Clique para alternar o modelo"
-              >
-                <Sparkles className="w-3 h-3 text-emerald-400" />
-                <span>$(sparkle) {selectedModel}</span>
+            {/* Barra de Status Inferior do SCM */}
+            <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-500 font-mono">
+              <span className="flex items-center gap-1 text-emerald-400">
+                <Check className="w-3 h-3" /> vscode.git API v1 ativa
               </span>
-              <span className="text-emerald-400">vscode.git v1</span>
+              <button
+                onClick={() => handleGenerate()}
+                disabled={loading}
+                className="text-zinc-300 hover:text-white underline text-[10px]"
+              >
+                Disparar IA
+              </button>
             </div>
           </div>
 
-          {/* Visualizador do Diff (Editor Central) */}
+          {/* Área do Editor / Visualizador do Git Diff */}
           <div
-            onContextMenu={(e) => handleOpenContextMenu(e, "editor", "git-diff-viewer")}
-            className="lg:col-span-7 bg-zinc-950 p-4 flex flex-col justify-between overflow-x-auto cursor-context-menu"
+            onContextMenu={(e) => handleOpenContextMenu(e, "editor", "Git Diff Viewer")}
+            className="lg:col-span-7 bg-zinc-950 p-4 flex flex-col justify-between overflow-x-auto"
           >
             <div>
-              <div className="flex items-center justify-between pb-3 border-b border-zinc-800 text-xs">
+              {/* Tab Header do Diff */}
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-800 text-xs font-mono text-zinc-400">
                 <div className="flex items-center gap-2">
-                  <FileCode className="w-4 h-4 text-emerald-400" />
-                  <span className="font-mono text-zinc-300 font-semibold text-[12px]">
-                    {isCustomMode ? "Diff Customizado" : selectedSample.title}
-                  </span>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-zinc-800 text-zinc-400 rounded font-mono">
-                    git diff
-                  </span>
+                  <div className="px-3 py-1 bg-zinc-900 text-zinc-200 border-t-2 border-emerald-500 rounded-t flex items-center gap-1.5">
+                    <FileCode className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Working Tree ↔ Git Index (Diff)</span>
+                  </div>
                 </div>
-
-                <div className="text-[11px] text-zinc-500 font-mono">
-                  {activeDiffText.length} caracteres - {selectedModel}
+                <div className="text-[11px] text-zinc-500">
+                  {isStaged ? "Modo: Staged (Prioritário)" : "Modo: Unstaged"}
                 </div>
               </div>
 
+              {/* Editor de Diff ou Visualizador formatado */}
               {isCustomMode ? (
                 <div className="mt-3">
                   <label className="block text-xs font-mono text-zinc-400 mb-1">
-                    Cole o seu git diff real abaixo:
+                    Cole o seu Git Diff customizado abaixo:
                   </label>
                   <textarea
-                    rows={15}
+                    rows={12}
                     value={customDiff}
                     onChange={(e) => setCustomDiff(e.target.value)}
-                    placeholder="Cole aqui a saída de 'git diff' ou 'git diff --staged'..."
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs font-mono text-zinc-200 focus:outline-none focus:border-emerald-500 resize-none leading-relaxed"
+                    placeholder="Cole a saída de 'git diff' ou 'git diff --cached' aqui..."
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs font-mono text-zinc-200 focus:outline-none focus:border-emerald-500 resize-y leading-relaxed"
                   />
                 </div>
               ) : (
@@ -622,19 +650,19 @@ export const VsCodeSimulator: React.FC = () => {
               )}
             </div>
 
-            {/* Dica técnica sobre o fluxo */}
+            {/* Dica técnica sobre o modelo ativo */}
             <div className="mt-4 p-2.5 bg-zinc-900/60 border border-zinc-800 rounded-md flex items-center justify-between text-[11px] text-zinc-400 font-mono">
               <div className="flex items-center gap-2">
                 <Info className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                 <span>
-                  Modelo ativo: <strong className="text-zinc-200">{selectedModel}</strong> ({currentModelData.badge})
+                  Modelo ativo: <strong className="text-zinc-200">{currentModelData.name}</strong> ({currentModelData.providerLabel})
                 </span>
               </div>
               <button
                 onClick={() => setModelPickerOpen(true)}
-                className="text-emerald-400 hover:underline"
+                className="text-cyan-400 hover:underline"
               >
-                Alterar Modelo
+                Alternar Modelo
               </button>
             </div>
           </div>
@@ -690,18 +718,20 @@ export const VsCodeSimulator: React.FC = () => {
             className="w-full text-left px-3 py-1.5 hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 transition-colors"
           >
             <Cpu className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Selecionar Modelo de IA ({selectedModel})</span>
+            <span>Selecionar Modelo ({currentModelData.name})</span>
           </button>
 
           <button
             onClick={() => {
               setContextMenu((prev) => ({ ...prev, visible: false }));
+              setActiveProviderForApiKey(currentModelData.provider);
+              setTempApiKeyInput(apiKeys[currentModelData.provider] || "");
               setApiKeyPromptOpen(true);
             }}
             className="w-full text-left px-3 py-1.5 hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 transition-colors"
           >
             <KeyRound className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Configurar Chave de API</span>
+            <span>Configurar Chave de API ({currentModelData.providerLabel})</span>
           </button>
 
           <div className="border-t border-zinc-800 my-1"></div>
@@ -719,24 +749,74 @@ export const VsCodeSimulator: React.FC = () => {
         </div>
       )}
 
-      {/* QUICKPICK SIMULADO: SELETOR DE MODELOS DE IA (vscode.window.showQuickPick) */}
+      {/* QUICKPICK SIMULADO: SELETOR DE MODELOS & PROVEDORES DE IA */}
       {modelPickerOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-xl max-w-lg w-full p-4 text-zinc-100 shadow-2xl space-y-3">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl max-w-xl w-full p-4 text-zinc-100 shadow-2xl space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
               <div className="flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-sm font-semibold">Gemini Git Commit: Selecionar Modelo de IA</h3>
+                <Cpu className="w-4 h-4 text-cyan-400" />
+                <h3 className="text-sm font-semibold">Izy Commit: Selecionar Modelo & Provedor</h3>
               </div>
               <span className="text-[10px] font-mono text-zinc-500">vscode.window.showQuickPick</span>
             </div>
 
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Escolha o modelo do Google Gemini que será utilizado para inspecionar o git diff e redigir o commit no padrão Conventional Commits:
-            </p>
+            {/* Abas / Filtro por Provedor */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+              <button
+                onClick={() => setModelFilterProvider("all")}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  modelFilterProvider === "all"
+                    ? "bg-zinc-100 text-zinc-900 font-semibold"
+                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                Todos
+              </button>
+              <button
+                onClick={() => setModelFilterProvider("openrouter")}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  modelFilterProvider === "openrouter"
+                    ? "bg-cyan-500 text-zinc-950 font-semibold"
+                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                OpenRouter (R1, V3, Qwen, Claude)
+              </button>
+              <button
+                onClick={() => setModelFilterProvider("gemini")}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  modelFilterProvider === "gemini"
+                    ? "bg-emerald-500 text-zinc-950 font-semibold"
+                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                Google Gemini
+              </button>
+              <button
+                onClick={() => setModelFilterProvider("deepseek")}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  modelFilterProvider === "deepseek"
+                    ? "bg-indigo-500 text-white font-semibold"
+                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                DeepSeek Direto
+              </button>
+              <button
+                onClick={() => setModelFilterProvider("claude")}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  modelFilterProvider === "claude"
+                    ? "bg-amber-500 text-zinc-950 font-semibold"
+                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                Anthropic Direto
+              </button>
+            </div>
 
-            <div className="space-y-2 max-h-[340px] overflow-y-auto">
-              {SUPPORTED_MODELS.map((model) => {
+            <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+              {filteredModels.map((model) => {
                 const isCurrent = model.id === selectedModel;
                 return (
                   <div
@@ -744,20 +824,23 @@ export const VsCodeSimulator: React.FC = () => {
                     onClick={() => handleSelectModel(model.id)}
                     className={`p-3 rounded-lg border transition-all cursor-pointer flex items-start justify-between gap-3 ${
                       isCurrent
-                        ? "bg-zinc-800 border-emerald-500 text-white"
+                        ? "bg-zinc-800 border-cyan-500 text-white"
                         : "bg-zinc-950/60 border-zinc-800 text-zinc-300 hover:bg-zinc-800/80 hover:border-zinc-700"
                     }`}
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs font-semibold text-zinc-100">
-                          {model.id}
+                          {model.name}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono border border-zinc-700">
                           {model.badge}
                         </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400 font-mono">
+                          {model.providerLabel}
+                        </span>
                         {isCurrent && (
-                          <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1 font-mono">
+                          <span className="text-[10px] text-cyan-400 font-bold flex items-center gap-1 font-mono">
                             <CheckCircle2 className="w-3 h-3" />
                             (Ativo)
                           </span>
@@ -766,7 +849,8 @@ export const VsCodeSimulator: React.FC = () => {
                       <p className="text-[11px] text-zinc-400 leading-relaxed">
                         {model.description}
                       </p>
-                      <div className="flex items-center gap-3 text-[10px] font-mono text-zinc-500 pt-1">
+                      <div className="flex items-center gap-3 text-[10px] font-mono text-zinc-500 pt-0.5">
+                        <span>ID: <code className="text-zinc-300">{model.id}</code></span>
                         <span>Velocidade: {model.speed}</span>
                         <span>Qualidade: {model.quality}</span>
                       </div>
@@ -777,7 +861,7 @@ export const VsCodeSimulator: React.FC = () => {
                         type="radio"
                         checked={isCurrent}
                         onChange={() => handleSelectModel(model.id)}
-                        className="accent-emerald-500"
+                        className="accent-cyan-500"
                       />
                     </div>
                   </div>
@@ -785,7 +869,10 @@ export const VsCodeSimulator: React.FC = () => {
               })}
             </div>
 
-            <div className="flex items-center justify-end pt-2 border-t border-zinc-800">
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-800 text-xs">
+              <span className="text-[11px] text-zinc-500">
+                Pode ser configurado também via <code className="text-zinc-400">settings.json</code>
+              </span>
               <button
                 onClick={() => setModelPickerOpen(false)}
                 className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
@@ -804,29 +891,62 @@ export const VsCodeSimulator: React.FC = () => {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-sm font-semibold">Configurar Gemini API Key</h3>
+                <h3 className="text-sm font-semibold">Configurar Chave de API ({activeProviderForApiKey})</h3>
               </div>
               <span className="text-[10px] font-mono text-zinc-500">vscode.SecretStorage</span>
             </div>
 
             <p className="text-xs text-zinc-400 mb-4 leading-relaxed">
-              Armazena a chave com segurança no cofre criptografado do sistema operacional através de <code className="text-zinc-200">context.secrets</code>.
+              Armazena a chave com segurança no cofre criptografado do sistema operacional via <code className="text-zinc-200">context.secrets</code>.
             </p>
 
-            <div className="space-y-2 mb-4">
-              <label className="block text-[11px] font-mono text-zinc-400">
-                GEMINI_API_KEY (máscara ativada):
-              </label>
-              <input
-                type="password"
-                value={customApiKey}
-                onChange={(e) => setCustomApiKey(e.target.value)}
-                placeholder="AIzaSy..."
-                className="w-full bg-zinc-950 border border-zinc-700 rounded-md px-3 py-2 text-xs font-mono text-zinc-100 focus:outline-none focus:border-emerald-500"
-              />
-              <p className="text-[10px] text-zinc-500">
-                Deixe vazio e clique em Salvar para remover a chave do cofre.
-              </p>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">
+                  Provedor Selecionado:
+                </label>
+                <select
+                  value={activeProviderForApiKey}
+                  onChange={(e) => {
+                    const newProv = e.target.value as "gemini" | "openrouter" | "deepseek" | "claude" | "custom";
+                    setActiveProviderForApiKey(newProv);
+                    setTempApiKeyInput(apiKeys[newProv] || "");
+                  }}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-md px-2.5 py-1.5 text-xs text-zinc-200 font-mono"
+                >
+                  <option value="openrouter">OpenRouter (DeepSeek R1/V3, Qwen 2.5 Coder, Claude 3.7)</option>
+                  <option value="gemini">Google Gemini (Gemini 2.5 Flash / 3.8 / Pro)</option>
+                  <option value="deepseek">DeepSeek Direto (api.deepseek.com)</option>
+                  <option value="claude">Anthropic Claude Direto (api.anthropic.com)</option>
+                  <option value="custom">Endpoint Customizado / Ollama</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">
+                  Chave de API (máscara de segurança):
+                </label>
+                <input
+                  type="password"
+                  value={tempApiKeyInput}
+                  onChange={(e) => setTempApiKeyInput(e.target.value)}
+                  placeholder={
+                    activeProviderForApiKey === "openrouter"
+                      ? "sk-or-v1-..."
+                      : activeProviderForApiKey === "gemini"
+                      ? "AIzaSy..."
+                      : activeProviderForApiKey === "deepseek"
+                      ? "sk-..."
+                      : activeProviderForApiKey === "claude"
+                      ? "sk-ant-api03-..."
+                      : "Token Bearer opcional"
+                  }
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-md px-3 py-2 text-xs font-mono text-zinc-100 focus:outline-none focus:border-emerald-500"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Deixe em branco e clique em Salvar para remover a chave deste provedor.
+                </p>
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2">

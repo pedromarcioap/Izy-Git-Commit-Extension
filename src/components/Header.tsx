@@ -25,8 +25,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, isGener
                 <span className="px-2 py-0.5 text-xs font-mono bg-zinc-100 text-zinc-700 rounded border border-zinc-200">
                   VS Code Extension
                 </span>
-                <span className="hidden sm:inline-flex px-2 py-0.5 text-xs font-mono bg-emerald-50 text-emerald-700 rounded border border-emerald-200">
-                  gemini-2.5-flash
+                <span className="hidden sm:inline-flex px-2 py-0.5 text-xs font-mono bg-cyan-50 text-cyan-700 rounded border border-cyan-200">
+                  DeepSeek • Qwen • Claude • Gemini
                 </span>
               </div>
               <p className="text-xs text-zinc-500 hidden md:block">

@@ -1,9 +1,9 @@
 {
   "name": "izy-git-commit",
   "displayName": "Izy Git Commit Generator",
-  "description": "Gere mensagens de commit no padrão Conventional Commits via modelos do Google Gemini com integração nativa ao SCM e menus de contexto.",
-  "version": "1.1.0",
-  "publisher": "seu-usuario",
+  "description": "Gere mensagens de commit no padrão Conventional Commits via Google Gemini, OpenRouter (DeepSeek R1/V3, Qwen 2.5 Coder, Claude 3.7) e endpoints personalizados.",
+  "version": "1.2.0",
+  "publisher": "pedromarcio",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -16,6 +16,10 @@
     "git",
     "commit",
     "gemini",
+    "openrouter",
+    "deepseek",
+    "claude",
+    "qwen",
     "ai",
     "conventional-commits",
     "scm"
@@ -33,12 +37,12 @@
       },
       {
         "command": "aiCommit.selectModel",
-        "title": "Gemini Commit: Selecionar Modelo de IA",
+        "title": "Izy Commit: Selecionar Modelo & Provedor de IA",
         "icon": "$(server-process)"
       },
       {
         "command": "aiCommit.setApiKey",
-        "title": "Gemini Commit: Configurar Chave de API",
+        "title": "Izy Commit: Configurar Chaves de API",
         "icon": "$(key)"
       }
     ],
@@ -91,24 +95,50 @@
     "configuration": {
       "title": "Izy Git Commit",
       "properties": {
-        "geminiCommit.model": {
+        "aiCommit.provider": {
+          "type": "string",
+          "default": "gemini",
+          "enum": [
+            "gemini",
+            "openrouter",
+            "deepseek",
+            "claude",
+            "custom"
+          ],
+          "enumDescriptions": [
+            "Google Gemini (API Oficial Google AI Studio)",
+            "OpenRouter (Hub universal para DeepSeek R1, DeepSeek V3, Qwen 2.5 Coder, Claude 3.7)",
+            "DeepSeek (API Direta Oficial - api.deepseek.com)",
+            "Anthropic Claude (API Direta Oficial - api.anthropic.com)",
+            "Endpoint Customizado / Ollama / OpenAI Compatível"
+          ],
+          "description": "Provedor de inteligência artificial ativo."
+        },
+        "aiCommit.model": {
           "type": "string",
           "default": "gemini-2.5-flash",
           "enum": [
             "gemini-2.5-flash",
             "gemini-3.8-flash",
-            "gemini-3.1-flash-lite",
-            "gemini-3.1-pro-preview"
+            "gemini-3.1-pro-preview",
+            "deepseek/deepseek-r1",
+            "deepseek/deepseek-chat",
+            "qwen/qwen-2.5-coder-32b-instruct",
+            "anthropic/claude-3.7-sonnet",
+            "anthropic/claude-3.5-haiku",
+            "deepseek-chat",
+            "deepseek-reasoner",
+            "claude-3-7-sonnet-20250219",
+            "claude-3-5-haiku-20241022"
           ],
-          "enumDescriptions": [
-            "Equilibrado, rápido e eficiente para mensagens de commit (Padrão).",
-            "Alta velocidade e compreensão contextual aprimorada.",
-            "Ultraleve e menor latência para alterações simples.",
-            "Raciocínio aprofundado para diffs complexos e refatorações extensas."
-          ],
-          "description": "Modelo do Google Gemini a ser utilizado para análise do diff."
+          "description": "Modelo de IA selecionado para análise do diff e geração de commits."
         },
-        "geminiCommit.maxDiffLength": {
+        "aiCommit.customEndpoint": {
+          "type": "string",
+          "default": "http://localhost:11434/v1/chat/completions",
+          "description": "URL do endpoint customizado compatível com a API da OpenAI (ex: Ollama, vLLM, Groq, Qwen DashScope)."
+        },
+        "aiCommit.maxDiffLength": {
           "type": "number",
           "default": 30000,
           "description": "Tamanho máximo de caracteres do diff enviado à API para controle de contexto."
@@ -117,11 +147,9 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run package",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
     "package": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
-    "lint": "eslint src --ext ts"
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
   },
   "dependencies": {
     "@google/genai": "^2.4.0"
@@ -129,7 +157,7 @@
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.0",
     "typescript": "^5.3.3"
   }
 }
