@@ -777,7 +777,51 @@ async function handleGenerateCommitMessage(
     );
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
+    const { provider } = getActiveAIConfig();
+
+    if (errorMsg.includes('401') || errorMsg.toLowerCase().includes('unauthorized') || errorMsg.includes('Authentication header')) {
+      const providerLabels: Record<AIProvider, string> = {
+        openrouter: 'OpenRouter',
+        deepseek: 'DeepSeek (Oficial)',
+        gemini: 'Google Gemini',
+        claude: 'Anthropic Claude',
+        custom: 'Endpoint Personalizado'
+      };
+      const pName = providerLabels[provider] || provider;
+
+      const choice = await vscode.window.showErrorMessage(
+        \`Erro de Autenticação (401) ao conectar com \${pName}: A chave de API está ausente ou inválida.\`,
+        'Configurar Chave Agora',
+        'Obter Chave no Site'
+      );
+
+      if (choice === 'Configurar Chave Agora') {
+        await promptAndSaveApiKeyForProvider(context, provider);
+      } else if (choice === 'Obter Chave no Site') {
+        const url = getProviderApiKeyUrl(provider);
+        if (url) {
+          await vscode.env.openExternal(vscode.Uri.parse(url));
+        }
+      }
+      return;
+    }
+
     vscode.window.showErrorMessage(\`Erro ao gerar commit: \${errorMsg}\`);
+  }
+}
+
+function getProviderApiKeyUrl(provider: AIProvider): string | undefined {
+  switch (provider) {
+    case 'openrouter':
+      return 'https://openrouter.ai/keys';
+    case 'deepseek':
+      return 'https://platform.deepseek.com/api_keys';
+    case 'gemini':
+      return 'https://aistudio.google.com/app/apikey';
+    case 'claude':
+      return 'https://console.anthropic.com/settings/keys';
+    default:
+      return undefined;
   }
 }
 
@@ -802,10 +846,14 @@ Regras estritas de formatação:
   Tipos permitidos: feat, fix, refactor, perf, test, docs, style, build, ci, chore, revert.
 - Linha 2: Obrigatoriamente uma linha em branco.
 - Linhas seguintes: Tópicos detalhando as alterações técnicas, usando exclusivamente hífens (-) como marcadores.
-- Não inclua blocos de código markdown (\`\`\`), preâmbulos, saudações ou justificativas fora da mensagem.
+- Não inclua blocos de código markdown (\\\`\\\`\\\`), preâmbulos, saudações ou justificativas fora da mensagem.
 - Use apenas hifens (-) para listas e pontuações, nunca travessões. Mantenha um tom direto e profissional.\`;
 
   const userPrompt = \`Analise este git diff e gere a mensagem de commit correspondente:\\n\\n\${preparedDiff}\`;
+
+  if (provider !== 'custom' && (!apiKey || apiKey.trim().length === 0)) {
+    throw new Error(\`Chave de API não configurada para o provedor \${provider.toUpperCase()}. Configure em 'Izy Commit: Configurar Chaves de API'.\`);
+  }
 
   switch (provider) {
     case 'gemini':

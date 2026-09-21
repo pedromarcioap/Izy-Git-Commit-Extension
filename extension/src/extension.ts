@@ -468,7 +468,55 @@ async function handleGenerateCommitMessage(
     );
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
+    const { provider } = getActiveAIConfig();
+    
+    // Tratamento amigável e interativo para erro 401 (Unauthorized / Missing Auth Header)
+    if (errorMsg.includes('401') || errorMsg.toLowerCase().includes('unauthorized') || errorMsg.includes('Authentication header')) {
+      const providerLabels: Record<AIProvider, string> = {
+        openrouter: 'OpenRouter',
+        deepseek: 'DeepSeek (Oficial)',
+        gemini: 'Google Gemini',
+        claude: 'Anthropic Claude',
+        custom: 'Endpoint Personalizado'
+      };
+      const pName = providerLabels[provider] || provider;
+      
+      const choice = await vscode.window.showErrorMessage(
+        `Erro de Autenticação (401) ao conectar com ${pName}: A chave de API está ausente ou inválida.`,
+        'Configurar Chave Agora',
+        'Obter Chave no Site'
+      );
+
+      if (choice === 'Configurar Chave Agora') {
+        await promptAndSaveApiKeyForProvider(context, provider);
+      } else if (choice === 'Obter Chave no Site') {
+        const url = getProviderApiKeyUrl(provider);
+        if (url) {
+          await vscode.env.openExternal(vscode.Uri.parse(url));
+        }
+      }
+      return;
+    }
+
     vscode.window.showErrorMessage(`Erro ao gerar mensagem de commit: ${errorMsg}`);
+  }
+}
+
+/**
+ * Retorna o link oficial para geração de chaves por provedor
+ */
+function getProviderApiKeyUrl(provider: AIProvider): string | undefined {
+  switch (provider) {
+    case 'openrouter':
+      return 'https://openrouter.ai/keys';
+    case 'deepseek':
+      return 'https://platform.deepseek.com/api_keys';
+    case 'gemini':
+      return 'https://aistudio.google.com/app/apikey';
+    case 'claude':
+      return 'https://console.anthropic.com/settings/keys';
+    default:
+      return undefined;
   }
 }
 
@@ -500,6 +548,11 @@ Regras estritas de formatação:
 - Use apenas hifens (-) para listas e pontuações, nunca travessões. Mantenha um tom direto e profissional.`;
 
   const userPrompt = `Analise este git diff e gere a mensagem de commit correspondente:\n\n${preparedDiff}`;
+
+  // Validação prévia de chave para evitar requisições 401 desnecessárias
+  if (provider !== 'custom' && (!apiKey || apiKey.trim().length === 0)) {
+    throw new Error(`Chave de API não configurada para o provedor ${provider.toUpperCase()}. Configure em 'Izy Commit: Configurar Chaves de API'.`);
+  }
 
   switch (provider) {
     case 'gemini':
@@ -733,28 +786,33 @@ async function promptAndSaveApiKeyForProvider(
   const currentKey = await context.secrets.get(secretKeyName);
 
   let providerName = 'Google Gemini';
-  let example = 'AIzaSy...';
+  let example = 'AIzaSy... (aistudio.google.com)';
+  let promptMsg = 'Cole sua chave do Google AI Studio (Gemini)';
 
   if (provider === 'openrouter') {
     providerName = 'OpenRouter';
-    example = 'sk-or-v1-...';
+    example = 'sk-or-v1-... (openrouter.ai/keys)';
+    promptMsg = 'Cole sua chave do OpenRouter (usada para DeepSeek R1/V3, Qwen 2.5 e Claude no OpenRouter)';
   } else if (provider === 'deepseek') {
-    providerName = 'DeepSeek';
-    example = 'sk-...';
+    providerName = 'DeepSeek Oficial';
+    example = 'sk-... (platform.deepseek.com)';
+    promptMsg = 'Cole sua chave oficial da DeepSeek (api.deepseek.com)';
   } else if (provider === 'claude') {
     providerName = 'Anthropic Claude';
-    example = 'sk-ant-api03-...';
+    example = 'sk-ant-api03-... (console.anthropic.com)';
+    promptMsg = 'Cole sua chave oficial da Anthropic';
   } else if (provider === 'custom') {
     providerName = 'Endpoint Personalizado';
-    example = 'Bearer token ou deixe em branco se local';
+    example = 'Bearer token ou deixe em branco para Ollama local';
+    promptMsg = 'Cole a chave/token de autenticação (opcional para localhost)';
   }
 
   const input = await vscode.window.showInputBox({
     title: `Configurar Chave de API: ${providerName}`,
-    prompt: `Cole sua chave de API para ${providerName}`,
+    prompt: promptMsg,
     password: true,
     ignoreFocusOut: true,
-    placeHolder: currentKey ? 'Deixe em branco para remover ou digite a nova chave' : `Ex: ${example}`
+    placeHolder: currentKey ? 'Chave já configurada. Deixe em branco para remover ou digite a nova chave' : `Ex: ${example}`
   });
 
   if (input === undefined) {
