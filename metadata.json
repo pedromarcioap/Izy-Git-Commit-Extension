@@ -1,0 +1,8 @@
+{
+  "name": "Izy Git Commit Extension",
+  "description": "Extensão VS Code e gerador automatizado de mensagens de commit via IA com integração à API nativa de SCM do Git.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
