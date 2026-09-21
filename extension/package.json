@@ -1,0 +1,135 @@
+{
+  "name": "izy-git-commit",
+  "displayName": "Izy Git Commit Generator",
+  "description": "Gere mensagens de commit no padrão Conventional Commits via modelos do Google Gemini com integração nativa ao SCM e menus de contexto.",
+  "version": "1.1.0",
+  "publisher": "seu-usuario",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Machine Learning",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "git",
+    "commit",
+    "gemini",
+    "ai",
+    "conventional-commits",
+    "scm"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aiCommit.generateCommitMessage",
+        "title": "Gerar Mensagem de Commit com IA",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "aiCommit.selectModel",
+        "title": "Gemini Commit: Selecionar Modelo de IA",
+        "icon": "$(server-process)"
+      },
+      {
+        "command": "aiCommit.setApiKey",
+        "title": "Gemini Commit: Configurar Chave de API",
+        "icon": "$(key)"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "aiCommit.generateCommitMessage",
+          "group": "navigation@1"
+        },
+        {
+          "command": "aiCommit.selectModel",
+          "group": "navigation@2"
+        }
+      ],
+      "scm/resourceGroup/context": [
+        {
+          "command": "aiCommit.generateCommitMessage",
+          "group": "inline"
+        },
+        {
+          "command": "aiCommit.selectModel",
+          "group": "1_modification"
+        }
+      ],
+      "scm/resourceState/context": [
+        {
+          "command": "aiCommit.generateCommitMessage",
+          "group": "7_modification"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "aiCommit.generateCommitMessage",
+          "group": "7_modification",
+          "when": "editorTextFocus"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "aiCommit.generateCommitMessage"
+        },
+        {
+          "command": "aiCommit.selectModel"
+        },
+        {
+          "command": "aiCommit.setApiKey"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Izy Git Commit",
+      "properties": {
+        "geminiCommit.model": {
+          "type": "string",
+          "default": "gemini-2.5-flash",
+          "enum": [
+            "gemini-2.5-flash",
+            "gemini-3.8-flash",
+            "gemini-3.1-flash-lite",
+            "gemini-3.1-pro-preview"
+          ],
+          "enumDescriptions": [
+            "Equilibrado, rápido e eficiente para mensagens de commit (Padrão).",
+            "Alta velocidade e compreensão contextual aprimorada.",
+            "Ultraleve e menor latência para alterações simples.",
+            "Raciocínio aprofundado para diffs complexos e refatorações extensas."
+          ],
+          "description": "Modelo do Google Gemini a ser utilizado para análise do diff."
+        },
+        "geminiCommit.maxDiffLength": {
+          "type": "number",
+          "default": 30000,
+          "description": "Tamanho máximo de caracteres do diff enviado à API para controle de contexto."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "lint": "eslint src --ext ts"
+  },
+  "dependencies": {
+    "@google/genai": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.3.3"
+  }
+}
