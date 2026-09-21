@@ -1,7 +1,7 @@
 {
   "name": "izy-git-commit",
   "displayName": "Izy Git Commit Generator",
-  "description": "Gere mensagens de commit no padrão Conventional Commits via IAs.",
+  "description": "Gere mensagens de commit no padrão Conventional Commits via Google Gemini, OpenRouter (DeepSeek R1/V3, Qwen 2.5 Coder, Claude 3.7) e endpoints personalizados.",
   "version": "1.1.0",
   "publisher": "pedromarcioap",
   "engines": {
@@ -12,17 +12,173 @@
     "Machine Learning",
     "Programming Languages"
   ],
+  "keywords": [
+    "git",
+    "commit",
+    "gemini",
+    "openrouter",
+    "deepseek",
+    "claude",
+    "qwen",
+    "ai",
+    "conventional-commits",
+    "scm"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aiCommit.generateCommitMessage",
+        "title": "Gerar Mensagem de Commit com IA",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "aiCommit.selectModel",
+        "title": "Izy Commit: Selecionar Modelo & Provedor de IA",
+        "icon": "$(server-process)"
+      },
+      {
+        "command": "aiCommit.setApiKey",
+        "title": "Izy Commit: Configurar Chaves de API",
+        "icon": "$(key)"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "aiCommit.generateCommitMessage",
+          "group": "navigation@1"
+        },
+        {
+          "command": "aiCommit.selectModel",
+          "group": "navigation@2"
+        }
+      ],
+      "scm/resourceGroup/context": [
+        {
+          "command": "aiCommit.generateCommitMessage",
+          "group": "inline"
+        },
+        {
+          "command": "aiCommit.selectModel",
+          "group": "1_modification"
+        }
+      ],
+      "scm/resourceState/context": [
+        {
+          "command": "aiCommit.generateCommitMessage",
+          "group": "7_modification"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "aiCommit.generateCommitMessage",
+          "group": "7_modification",
+          "when": "editorTextFocus"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "aiCommit.generateCommitMessage"
+        },
+        {
+          "command": "aiCommit.selectModel"
+        },
+        {
+          "command": "aiCommit.setApiKey"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Izy Git Commit",
+      "properties": {
+        "aiCommit.provider": {
+          "type": "string",
+          "default": "gemini",
+          "enum": [
+            "gemini",
+            "openrouter",
+            "deepseek",
+            "claude",
+            "custom"
+          ],
+          "enumDescriptions": [
+            "Google Gemini (API Oficial Google AI Studio)",
+            "OpenRouter (Hub universal para DeepSeek R1, DeepSeek V3, Qwen 2.5 Coder, Claude 3.7)",
+            "DeepSeek (API Direta Oficial - api.deepseek.com)",
+            "Anthropic Claude (API Direta Oficial - api.anthropic.com)",
+            "Endpoint Customizado / Ollama / OpenAI Compatível"
+          ],
+          "description": "Provedor de inteligência artificial ativo."
+        },
+        "aiCommit.model": {
+          "type": "string",
+          "default": "gemini-2.5-flash",
+          "enum": [
+            "gemini-2.5-flash",
+            "gemini-3.8-flash",
+            "gemini-3.1-pro-preview",
+            "deepseek/deepseek-r1",
+            "deepseek/deepseek-chat",
+            "qwen/qwen-2.5-coder-32b-instruct",
+            "anthropic/claude-3.7-sonnet",
+            "anthropic/claude-3.5-haiku",
+            "deepseek-chat",
+            "deepseek-reasoner",
+            "claude-3-7-sonnet-20250219",
+            "claude-3-5-haiku-20241022"
+          ],
+          "description": "Modelo de IA selecionado para análise do diff e geração de commits."
+        },
+        "aiCommit.customEndpoint": {
+          "type": "string",
+          "default": "http://localhost:11434/v1/chat/completions",
+          "description": "URL do endpoint customizado compatível com a API da OpenAI (ex: Ollama, vLLM, Groq, Qwen DashScope)."
+        },
+        "aiCommit.maxDiffLength": {
+          "type": "number",
+          "default": 30000,
+          "description": "Tamanho máximo de caracteres do diff enviado à API para controle de contexto."
+        }
+      }
+    }
+  },
   "scripts": {
-    "package": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify"
+    "dev": "tsx server.ts",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "start": "node dist/server.cjs",
+    "lint": "tsc --noEmit",
+    "package": "esbuild ./extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify && esbuild ./extension/src/extension.ts --bundle --outfile=extension/dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "package:root": "esbuild ./extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "package:vsix": "npx @vscode/vsce package --allow-missing-repository"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0"
+    "@google/genai": "^2.4.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.1",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "jszip": "^3.10.2",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "vite": "^8.3.0"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
+    "@types/express": "^4.17.21",
+    "@types/jszip": "^3.4.1",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@types/vscode": "^1.85.0",
+    "autoprefixer": "^10.4.21",
     "esbuild": "^0.28.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.3"
   }
 }

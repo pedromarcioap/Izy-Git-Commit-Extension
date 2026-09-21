@@ -158,8 +158,8 @@ export const EXTENSION_FILES: ExtensionFile[] = [
   "name": "izy-git-commit",
   "displayName": "Izy Git Commit Generator",
   "description": "Gere mensagens de commit no padrão Conventional Commits via Google Gemini, OpenRouter (DeepSeek R1/V3, Qwen 2.5 Coder, Claude 3.7) e endpoints personalizados.",
-  "version": "1.2.0",
-  "publisher": "pedromarcio",
+  "version": "1.1.0",
+  "publisher": "pedromarcioap",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -289,6 +289,7 @@ export const EXTENSION_FILES: ExtensionFile[] = [
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run package",
     "package": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./"
