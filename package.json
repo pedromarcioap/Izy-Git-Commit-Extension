@@ -116,7 +116,7 @@
         },
         "aiCommit.model": {
           "type": "string",
-          "default": "gemini-2.5-flash",
+          "default": "gemini-3.8-flash",
           "enum": [
             "gemini-2.5-flash",
             "gemini-3.8-flash",
