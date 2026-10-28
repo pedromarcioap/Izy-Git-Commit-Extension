@@ -64,21 +64,12 @@ export const PRESET_MODELS: ModelDefinition[] = [
 
   // Google Gemini (API Oficial Google AI Studio)
   {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash (Google)',
-    provider: 'gemini',
-    providerLabel: 'Google Gemini',
-    badge: 'Padrão Gratuito',
-    detail: 'Equilibrado, rápido e gratuito no Google AI Studio (Padrão recomendado).',
-    icon: '$(sparkle)'
-  },
-  {
     id: 'gemini-3.8-flash',
     name: 'Gemini 3.8 Flash (Google)',
     provider: 'gemini',
     providerLabel: 'Google Gemini',
-    badge: 'Nova Geração',
-    detail: 'Velocidade e compreensão multimodal avançada do Google.',
+    badge: 'Padrão Recomendado',
+    detail: 'Velocidade e compreensão multimodal avançada do Google (Padrão recomendado).',
     icon: '$(zap)'
   },
   {
@@ -132,7 +123,7 @@ export const PRESET_MODELS: ModelDefinition[] = [
   }
 ];
 
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_MODEL = 'gemini-3.8-flash';
 const DEFAULT_PROVIDER: AIProvider = 'gemini';
 
 let statusBarItem: vscode.StatusBarItem;
@@ -206,6 +197,16 @@ function getActiveAIConfig(): { provider: AIProvider; model: string } {
 
   let model = config.get<string>('model') || legacyConfig.get<string>('model') || DEFAULT_MODEL;
   let provider = config.get<AIProvider>('provider');
+
+  // Migração transparente de modelos legados ou descontinuados pelo Google AI Studio
+  if (!model || model === 'gemini-2.5-flash') {
+    model = 'gemini-3.8-flash';
+    try {
+      config.update('model', 'gemini-3.8-flash', vscode.ConfigurationTarget.Global);
+    } catch {
+      // Ignora erro de gravação e mantém em memória
+    }
+  }
 
   // Auto-inferir provedor a partir do modelo selecionado se não definido
   if (!provider) {
@@ -498,6 +499,21 @@ async function handleGenerateCommitMessage(
       return;
     }
 
+    // Tratamento amigável para modelo descontinuado pelo Google
+    if (errorMsg.includes('gemini-2.5-flash') || errorMsg.includes('no longer available')) {
+      const choice = await vscode.window.showWarningMessage(
+        'O modelo gemini-2.5-flash foi descontinuado pelo Google. Alternar agora para gemini-3.8-flash (recomendado)?',
+        'Alternar para Gemini 3.8 Flash'
+      );
+      if (choice === 'Alternar para Gemini 3.8 Flash') {
+        const cfg = vscode.workspace.getConfiguration('aiCommit');
+        await cfg.update('model', 'gemini-3.8-flash', vscode.ConfigurationTarget.Global);
+        updateStatusBar();
+        vscode.window.showInformationMessage('Modelo atualizado para gemini-3.8-flash! Clique novamente no ícone para gerar a mensagem.');
+      }
+      return;
+    }
+
     vscode.window.showErrorMessage(`Erro ao gerar mensagem de commit: ${errorMsg}`);
   }
 }
@@ -597,18 +613,43 @@ async function requestFromGemini(
   systemInstruction: string,
   userPrompt: string
 ): Promise<string> {
-  const ai = new GoogleGenAI({ apiKey });
-  const response = await ai.models.generateContent({
-    model,
-    contents: userPrompt,
-    config: {
-      systemInstruction,
-      temperature: 0.2
-    }
-  });
+  // Garantir que modelo descontinuado nunca seja enviado ao Google AI Studio
+  let targetModel = model;
+  if (!targetModel || targetModel === 'gemini-2.5-flash') {
+    targetModel = 'gemini-3.8-flash';
+  }
 
-  const rawText = response.text || '';
-  return cleanCommitMessage(rawText);
+  const ai = new GoogleGenAI({ apiKey });
+
+  try {
+    const response = await ai.models.generateContent({
+      model: targetModel,
+      contents: userPrompt,
+      config: {
+        systemInstruction,
+        temperature: 0.2
+      }
+    });
+
+    const rawText = response.text || '';
+    return cleanCommitMessage(rawText);
+  } catch (error: any) {
+    const errText = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+    // Fallback resiliente: se falhar por modelo descontinuado/404, retenta com gemini-3.8-flash
+    if (targetModel !== 'gemini-3.8-flash' && (errText.includes('no longer available') || errText.includes('404') || errText.includes('NOT_FOUND'))) {
+      const fallbackResponse = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: userPrompt,
+        config: {
+          systemInstruction,
+          temperature: 0.2
+        }
+      });
+      const rawText = fallbackResponse.text || '';
+      return cleanCommitMessage(rawText);
+    }
+    throw error;
+  }
 }
 
 /**

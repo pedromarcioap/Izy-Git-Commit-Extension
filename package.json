@@ -118,7 +118,6 @@
           "type": "string",
           "default": "gemini-3.8-flash",
           "enum": [
-            "gemini-2.5-flash",
             "gemini-3.8-flash",
             "gemini-3.1-pro-preview",
             "deepseek/deepseek-r1",
@@ -153,7 +152,7 @@
     "lint": "tsc --noEmit",
     "package": "esbuild ./extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify && esbuild ./extension/src/extension.ts --bundle --outfile=extension/dist/extension.js --external:vscode --format=cjs --platform=node --minify",
     "package:root": "esbuild ./extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
-    "package:vsix": "npx @vscode/vsce package --allow-missing-repository"
+    "package:vsix": "npm run package && cd extension && npx @vscode/vsce package --allow-missing-repository --skip-license"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

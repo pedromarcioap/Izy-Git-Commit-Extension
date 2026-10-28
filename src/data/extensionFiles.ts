@@ -73,22 +73,12 @@ export const SUPPORTED_MODELS: ModelOption[] = [
 
   // Google Gemini
   {
-    id: "gemini-2.5-flash",
-    name: "Gemini 2.5 Flash",
-    provider: "gemini",
-    providerLabel: "Google Gemini",
-    badge: "Padrão",
-    description: "Equilibrado, rápido e gratuito com cota no Google AI Studio.",
-    speed: "Muito Alta",
-    quality: "Excelente"
-  },
-  {
     id: "gemini-3.8-flash",
     name: "Gemini 3.8 Flash",
     provider: "gemini",
     providerLabel: "Google Gemini",
-    badge: "Recente",
-    description: "Alta velocidade com raciocínio e precisão contextual avançada.",
+    badge: "Padrão",
+    description: "Alta velocidade com raciocínio e precisão contextual avançada (Padrão recomendado).",
     speed: "Alta",
     quality: "Superior"
   },
@@ -272,7 +262,7 @@ export const EXTENSION_FILES: ExtensionFile[] = [
         },
         "aiCommit.model": {
           "type": "string",
-          "default": "gemini-2.5-flash",
+          "default": "gemini-3.8-flash",
           "description": "Modelo de IA selecionado para análise do diff e geração de commits."
         },
         "aiCommit.customEndpoint": {
@@ -408,21 +398,12 @@ export const PRESET_MODELS: ModelDefinition[] = [
 
   // Google Gemini
   {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash (Google)',
-    provider: 'gemini',
-    providerLabel: 'Google Gemini',
-    badge: 'Padrão Gratuito',
-    detail: 'Equilibrado, rápido e gratuito no Google AI Studio (Padrão recomendado).',
-    icon: '$(sparkle)'
-  },
-  {
     id: 'gemini-3.8-flash',
     name: 'Gemini 3.8 Flash (Google)',
     provider: 'gemini',
     providerLabel: 'Google Gemini',
-    badge: 'Nova Geração',
-    detail: 'Velocidade e compreensão multimodal avançada do Google.',
+    badge: 'Padrão Recomendado',
+    detail: 'Velocidade e compreensão multimodal avançada do Google (Padrão recomendado).',
     icon: '$(zap)'
   },
   {
@@ -476,7 +457,7 @@ export const PRESET_MODELS: ModelDefinition[] = [
   }
 ];
 
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_MODEL = 'gemini-3.8-flash';
 const DEFAULT_PROVIDER: AIProvider = 'gemini';
 
 let statusBarItem: vscode.StatusBarItem;

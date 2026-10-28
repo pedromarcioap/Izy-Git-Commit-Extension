@@ -21,7 +21,7 @@ async function startServer() {
       }
 
       const activeProvider = provider || (model?.includes("/") ? "openrouter" : model?.startsWith("claude") ? "claude" : model?.startsWith("deepseek") ? "deepseek" : "gemini");
-      const selectedModel = model || "gemini-2.5-flash";
+      const selectedModel = model || "gemini-3.8-flash";
 
       const systemInstruction = `Você é um Engenheiro de Software Sênior especialista em Git e Conventional Commits.
 Sua tarefa é analisar o git diff fornecido e retornar exclusivamente a mensagem de commit pronta para uso.
